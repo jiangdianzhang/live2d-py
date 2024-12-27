@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
@@ -23,3 +24,30 @@ keywords = ["Live2D", "Cubism Live2D", "Cubism SDK", "Cubism SDK for Python"]
 Homepage = "https://github.com/Arkueid/live2d-py"
 Documentation = "https://Arkueid.github.io/live2d-py-docs/"
 Repository = "https://github.com/Arkueid/live2d-py"
+=======
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+requires-python = ">= 3.10"
+dynamic = ["version"]
+name = "live2d-py"
+dependencies = [
+    "pyopengl",
+    "pillow",
+    "numpy"
+]
+authors = [
+    { name = "Arkueid", email = "thetardis@qq.com" }
+]
+description = "A non-web Live2D library for Python."
+readme = "README.md"
+license = {file = "LICENSE"}
+keywords = ["Live2D", "Cubism Live2D", "Cubism SDK", "Cubism SDK for Python"]
+
+[project.urls]
+Homepage = "https://github.com/Arkueid/live2d-py"
+Documentation = "https://Arkueid.github.io/live2d-py-docs/"
+Repository = "https://github.com/Arkueid/live2d-py"
+>>>>>>> 6a76e8a588eed7552c6e2d5c8dd047bcec50ae15

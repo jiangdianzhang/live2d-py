@@ -10,10 +10,11 @@ import time
 import pygame
 from pygame.locals import *
 
-# import live2d.v3 as live2d
-# from live2d.v3 import log, StandardParams
-import live2d.v2 as live2d
-from live2d.v2 import log, StandardParams
+import live2d.v3 as live2d
+from live2d.v3 import StandardParams
+from live2d.utils import log
+# import live2d.v2 as live2d
+# from live2d.v2 import StandardParams
 
 
 import resources
@@ -27,20 +28,18 @@ def main():
     pygame.mixer.init()
     live2d.init()
 
-    display = (400, 500)
+    display = (200, 200)
     pygame.display.set_mode(display, DOUBLEBUF | OPENGL)
     pygame.display.set_caption("pygame window")
 
     if live2d.LIVE2D_VERSION == 3:
         live2d.glewInit()
-        pass
-        # live2d.setGLProperties()
 
     model = live2d.LAppModel()
 
     if live2d.LIVE2D_VERSION == 3:
         model.LoadModelJson(
-            os.path.join(resources.RESOURCES_DIRECTORY, "v3/lafei/lafei_4.model3.json")
+            os.path.join(resources.RESOURCES_DIRECTORY, "v3/mianfeimox/llny.model3.json")
         )
     else:
         model.LoadModelJson(
@@ -77,15 +76,16 @@ def main():
         log.Info("motion finished")
 
     # 获取全部可用参数
-    # for i in range(model.GetParameterCount()):
-    #     param: Parameter = model.GetParameter(i)
-    #     log.Debug(
-    #         param.id, param.type, param.value, param.max, param.min, param.default
-    #     )
+    for i in range(model.GetParameterCount()):
+        param = model.GetParameter(i)
+        log.Debug(
+            param.id, param.type, param.value, param.max, param.min, param.default
+        )
 
     # 设置 part 透明度
     # log.Debug(f"Part Count: {model.GetPartCount()}")
     partIds = model.GetPartIds()
+    # print(len(partIds))
     # log.Debug(f"Part Ids: {partIds}")
     # log.Debug(f"Part Id for index 2: {model.GetPartId(2)}")
     # model.SetPartOpacity(partIds.index("PartHairBack"), 0.5)

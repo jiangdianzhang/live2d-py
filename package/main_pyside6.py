@@ -7,9 +7,10 @@ from PySide6.QtCore import QTimerEvent, Qt
 from PySide6.QtGui import QMouseEvent, QCursor
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QGuiApplication
 
-# import live2d.v3 as live2d
-import live2d.v2 as live2d
+import live2d.v3 as live2d
+# import live2d.v2 as live2d
 import resources
 
 
@@ -26,11 +27,12 @@ class Win(QOpenGLWidget):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.a = 0
-        self.resize(640, 480)
+        self.resize(200, 200)
         self.read = False
         self.clickX = -1
         self.clickY = -1
         self.model: live2d.LAppModel | None = None
+        self.systemScale = QGuiApplication.primaryScreen().devicePixelRatio()
 
     def initializeGL(self) -> None:
         # 将当前窗口作为 OpenGL 的上下文
@@ -57,6 +59,8 @@ class Win(QOpenGLWidget):
             self.model.Resize(w, h)
 
     def paintGL(self) -> None:
+        # live2d.clearBuffer()
+        gl.glClearColor(0.0, 0.0, 0.0, 0.0)
         gl.glClear(gl.GL_COLOR_BUFFER_BIT)
 
         self.model.Update()
@@ -122,7 +126,7 @@ class Win(QOpenGLWidget):
 
     def isInL2DArea(self, click_x, click_y):
         h = self.height()
-        alpha = gl.glReadPixels(click_x, h - click_y, 1, 1, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)[3]
+        alpha = gl.glReadPixels(click_x * self.systemScale, (h - click_y) * self.systemScale, 1, 1, gl.GL_RGBA, gl.GL_UNSIGNED_BYTE)[3]
         return alpha > 0
 
     def mousePressEvent(self, event: QMouseEvent) -> None:

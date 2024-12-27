@@ -32,7 +32,6 @@ def main():
     live2d.init()
 
     live2d.glewInit()
-    live2d.setGLProperties()
 
     model = live2d.LAppModel()
 

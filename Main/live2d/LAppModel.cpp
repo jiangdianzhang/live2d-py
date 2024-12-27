@@ -6,7 +6,6 @@
  * that can be found at https://www.live2d.com/eula/live2d-open-software-license-agreement_en.html.
  */
 
-#include "LAppModel.hpp"
 #include <algorithm>
 #include <fstream>
 #include <vector>
@@ -25,6 +24,8 @@
 #include <Log.hpp>
 #include <filesystem>
 #include <unordered_set>
+
+#include "Default.hpp"
 
 using namespace Live2D::Cubism::Framework;
 using namespace Live2D::Cubism::Framework::DefaultParameterId;
@@ -45,8 +46,24 @@ namespace
     }
 }
 
+
+class FakeMotion : public ACubismMotion
+{
+protected:
+    void DoUpdateParameters(CubismModel* model, csmFloat32 userTimeSeconds, csmFloat32 weight,
+                            CubismMotionQueueEntry* motionQueueEntry) override
+    {
+    }
+
+public:
+    FakeMotion()
+    {
+    }
+};
+
 LAppModel::LAppModel()
-    : CubismUserModel(), _modelSetting(NULL), _userTimeSeconds(0.0f), _autoBlink(true), _autoBreath(true)
+    : CubismUserModel(), _modelSetting(NULL), _userTimeSeconds(0.0f), _autoBlink(true), _autoBreath(true),
+      _matrixManager()
 {
     _mocConsistency = MocConsistencyValidationEnable;
 
@@ -361,6 +378,8 @@ void LAppModel::ReleaseExpressions()
 
 void LAppModel::Update()
 {
+    LAppPal::UpdateTime();
+
     const csmFloat32 deltaTimeSeconds = LAppPal::GetDeltaTime();
     _userTimeSeconds += deltaTimeSeconds;
 
@@ -431,8 +450,8 @@ void LAppModel::Update()
 }
 
 CubismMotionQueueEntryHandle LAppModel::StartMotion(const csmChar* group, csmInt32 no, csmInt32 priority,
-                                                    OnMotionStartCallback onStartMotionHandler,
-                                                    OnMotionFinishCallback onFinishedMotionHandler)
+                                                    ACubismMotion::BeganMotionCallback onStartMotionHandler,
+                                                    ACubismMotion::FinishedMotionCallback onFinishedMotionHandler)
 {
     if (priority == PriorityForce)
     {
@@ -473,7 +492,7 @@ CubismMotionQueueEntryHandle LAppModel::StartMotion(const csmChar* group, csmInt
         csmSizeInt size;
         buffer = CreateBuffer(path.GetRawString(), &size);
 
-        motion = static_cast<CubismMotion*>(LoadMotion(buffer, size, NULL, onFinishedMotionHandler));
+        motion = static_cast<CubismMotion*>(LoadMotion(buffer, size, NULL));
 
         if (motion)
         {
@@ -497,24 +516,24 @@ CubismMotionQueueEntryHandle LAppModel::StartMotion(const csmChar* group, csmInt
 
     if (motion)
     {
+        motion->group = group;
+        motion->no = no;
+        motion->SetBeganMotionHandler(onStartMotionHandler);
         motion->SetFinishedMotionHandler(onFinishedMotionHandler);
     }
 
 handler_label:
 
-    if (onStartMotionHandler)
-    {
-        onStartMotionHandler(group, no);
-    }
-
     if (!hasMotion)
     {
         // 添加空指针判断，如果 motion 文件不存在，直接调用动作结束回调函数
         // 修复模型文件不存在时，导致崩溃
-        if (onFinishedMotionHandler)
-        {
-            onFinishedMotionHandler(NULL);
-        }
+        FakeMotion fakeMotion;
+        fakeMotion.group = group;
+        fakeMotion.no = no;
+        onStartMotionHandler(&fakeMotion);
+        onFinishedMotionHandler(&fakeMotion);
+
         _motionManager->SetReservePriority(PriorityNone);
         return InvalidMotionQueueEntryHandleValue;
     }
@@ -523,8 +542,8 @@ handler_label:
 }
 
 CubismMotionQueueEntryHandle LAppModel::StartRandomMotion(const csmChar* group, csmInt32 priority,
-                                                          OnMotionStartCallback onStartMotionHandler,
-                                                          OnMotionFinishCallback onFinishedMotionHandler)
+                                                          ACubismMotion::BeganMotionCallback onStartMotionHandler,
+                                                          ACubismMotion::FinishedMotionCallback onFinishedMotionHandler)
 {
     if (_modelSetting->GetMotionCount(group) == 0)
     {
@@ -546,7 +565,7 @@ void LAppModel::DoDraw()
     GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->DrawModel();
 }
 
-void LAppModel::Draw(CubismMatrix44& matrix)
+void LAppModel::Draw()
 {
     if (_model == NULL)
     {
@@ -555,6 +574,7 @@ void LAppModel::Draw(CubismMatrix44& matrix)
 
     _model->Update();
 
+    CubismMatrix44& matrix = _matrixManager.GetProjection(this);
     matrix.MultiplyByMatrix(_modelMatrix);
 
     GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->SetMvpMatrix(&matrix);
@@ -581,8 +601,9 @@ csmBool LAppModel::HitTest(const csmChar* hitAreaName, csmFloat32 x, csmFloat32 
     return false; // 存在しない場合はfalse
 }
 
-Csm::csmString LAppModel::HitTest(Csm::csmFloat32 x, Csm::csmFloat32 y)
+csmString LAppModel::HitTest(float x, float y)
 {
+    this->_matrixManager.ScreenToScene(&x, &y);
     // 透明時は当たり判定なし。
     if (_opacity < 1)
     {
@@ -598,6 +619,27 @@ Csm::csmString LAppModel::HitTest(Csm::csmFloat32 x, Csm::csmFloat32 y)
         }
     }
     return "";
+}
+
+void LAppModel::Resize(int ww, int wh)
+{
+    _matrixManager.UpdateScreenToScene(ww, wh);
+}
+
+void LAppModel::Touch(float x, float y, ACubismMotion::BeganMotionCallback s_call,
+                      ACubismMotion::FinishedMotionCallback f_call)
+{
+    csmString hitArea = HitTest(x, y);
+    if (strlen(hitArea.GetRawString()) != 0)
+    {
+        Info("hit area: [%s]", hitArea.GetRawString());
+        if (strcmp(hitArea.GetRawString(), HitAreaHead) == 0)
+        {
+            SetRandomExpression();
+        }
+        StartRandomMotion(hitArea.GetRawString(), MOTION_PRIORITY_FORCE,
+                          s_call, f_call);
+    }
 }
 
 void LAppModel::SetExpression(const csmChar* expressionID)
@@ -747,17 +789,15 @@ int LAppModel::GetParameterCount()
     return _model->GetParameterCount();
 }
 
-Parameter LAppModel::GetParameter(int i)
+void LAppModel::GetParameter(int i, const char*& id, int& type, float& value, float& maxValue, float& minValue,
+                             float& defaultValue)
 {
-    Parameter param{
-        _model->GetParameterId(i)->GetString().GetRawString(),
-        _model->GetParameterType(i),
-        _model->GetParameterValue(i),
-        _model->GetParameterMaximumValue(i),
-        _model->GetParameterMinimumValue(i),
-        _model->GetParameterDefaultValue(i)
-    };
-    return param;
+    id = _model->GetParameterId(i)->GetString().GetRawString();
+    type = _model->GetParameterType(i);
+    value = _model->GetParameterValue(i);
+    maxValue = _model->GetParameterMaximumValue(i);
+    minValue = _model->GetParameterMinimumValue(i);
+    defaultValue = _model->GetParameterDefaultValue(i);
 }
 
 int LAppModel::GetPartCount()
@@ -819,8 +859,9 @@ static bool isInTriangle(const csmVector2 p0, const csmVector2 p1, const csmVect
     return s >= 0 && t >= 0 && s + t <= D;
 }
 
-std::vector<std::string> LAppModel::HitPart(float x, float y, bool topOnly)
+void LAppModel::HitPart(float x, float y, bool topOnly, std::vector<std::string>& partIds)
 {
+    _matrixManager.ScreenToScene(&x, &y);
     x = _modelMatrix->InvertTransformX(x);
     y = _modelMatrix->InvertTransformY(y);
     const csmInt32 drawableCount = _model->GetDrawableCount();
@@ -833,7 +874,6 @@ std::vector<std::string> LAppModel::HitPart(float x, float y, bool topOnly)
     }
     // 多个 part index 可能指向同一个 part id，所以用 part id set
     std::unordered_set<const char*> hitParts;
-    std::vector<std::string> partIds;
     bool topClicked = false;
 
     for (int i = 0; i < drawableCount; i++)
@@ -886,7 +926,6 @@ std::vector<std::string> LAppModel::HitPart(float x, float y, bool topOnly)
         }
     }
     delete[] drawableIndices;
-    return partIds;
 }
 
 void LAppModel::setPartMultiplyColor(int partNo, float r, float g, float b, float a)
@@ -925,4 +964,20 @@ void LAppModel::getPartScreenColor(int partNo, float& r, float& g, float& b, flo
     g = color.G;
     b = color.B;
     a = color.A;
+}
+
+void LAppModel::Drag(float x, float y)
+{
+    _matrixManager.ScreenToScene(&x, &y);
+    SetDragging(x, y);
+}
+
+void LAppModel::SetOffset(float dx, float dy)
+{
+    _matrixManager.SetOffset(dx, dy);
+}
+
+void LAppModel::SetScale(float scale)
+{
+    _matrixManager.SetScale(scale);
 }
